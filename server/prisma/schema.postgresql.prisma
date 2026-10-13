@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CITIZEN
+  RESCUE_OPERATOR
+  ADMIN
+}
+
+enum DisasterType {
+  FLOOD
+  EARTHQUAKE
+  FIRE
+  LANDSLIDE
+  MEDICAL_EMERGENCY
+  BUILDING_COLLAPSE
+  SEVERE_WEATHER
+  OTHER
+}
+
+enum Severity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum IncidentStatus {
+  PENDING_REVIEW
+  ACKNOWLEDGED
+  IN_PROGRESS
+  RESOLVED
+  CANCELLED
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  role         Role      @default(CITIZEN)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  reportedIncidents Incident[]           @relation("CitizenIncidents")
+  assignedIncidents Incident[]           @relation("AssignedOperator")
+  statusHistories   IncidentStatusHistory[]
+  notes             IncidentNote[]
+  auditLogs         AuditLog[]
+
+  @@index([email])
+  @@index([role])
+}
+
+model Incident {
+  id                        String         @id @default(uuid())
+  clientIncidentId          String         @unique
+  reporterId                String
+  disasterType              DisasterType
+  title                     String
+  description               String
+  affectedPeople            Int            @default(1)
+  medicalAssistanceRequired Boolean        @default(false)
+  peopleTrapped             Boolean        @default(false)
+  severity                  Severity       @default(MEDIUM)
+  locationDescription       String
+  latitude                  Float?
+  longitude                 Float?
+  region                    String         @default("Pune City")
+  status                    IncidentStatus @default(PENDING_REVIEW)
+  assignedOperatorId        String?
+  createdAt                 DateTime       @default(now())
+  serverReceivedAt          DateTime       @default(now())
+  updatedAt                 DateTime       @updatedAt
+  resolvedAt                DateTime?
+
+  reporter         User                    @relation("CitizenIncidents", fields: [reporterId], references: [id], onDelete: Cascade)
+  assignedOperator User?                   @relation("AssignedOperator", fields: [assignedOperatorId], references: [id])
+  statusHistory    IncidentStatusHistory[]
+  notes            IncidentNote[]
+
+  @@index([clientIncidentId])
+  @@index([reporterId])
+  @@index([status])
+  @@index([severity])
+  @@index([disasterType])
+  @@index([region])
+}
+
+model IncidentStatusHistory {
+  id             String          @id @default(uuid())
+  incidentId     String
+  previousStatus IncidentStatus?
+  newStatus      IncidentStatus
+  changedById    String?
+  note           String?
+  createdAt      DateTime        @default(now())
+
+  incident  Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  changedBy User?    @relation(fields: [changedById], references: [id])
+
+  @@index([incidentId])
+  @@index([createdAt])
+}
+
+model IncidentNote {
+  id         String   @id @default(uuid())
+  incidentId String
+  authorId   String
+  note       String
+  createdAt  DateTime @default(now())
+
+  incident Incident @relation(fields: [incidentId], references: [id], onDelete: Cascade)
+  author   User     @relation(fields: [authorId], references: [id])
+
+  @@index([incidentId])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  actorId    String?
+  action     String
+  entityType String
+  entityId   String
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  actor User? @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([action])
+  @@index([createdAt])
+}
